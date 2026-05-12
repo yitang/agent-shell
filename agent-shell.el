@@ -5,7 +5,7 @@
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/agent-shell
 ;; Version: 0.50.1
-;; Package-Requires: ((emacs "29.1") (shell-maker "0.90.1") (acp "0.11.1"))
+;; Package-Requires: ((emacs "29.1") (shell-maker "0.91.2") (acp "0.11.1"))
 
 (defconst agent-shell--version "0.50.1")
 
@@ -47,7 +47,7 @@
 (require 'json)
 (require 'map)
 (unless (require 'markdown-overlays nil 'noerror)
-  (error "Please update 'shell-maker' to v0.90.1 or newer"))
+  (error "Please update 'shell-maker' to v0.91.2 or newer"))
 (require 'agent-shell-anthropic)
 (require 'agent-shell-auggie)
 (require 'agent-shell-cline)
@@ -1272,14 +1272,22 @@ See also `agent-shell-confirm-interrupt'."
       :shell-buffer (map-elt shell :buffer)))))
 
 (defun agent-shell--filter-buffer-substring (start end &optional delete)
-  "Return the buffer substring between START and END, after filtering.
-Strip the text properties `line-prefix' and `wrap-prefix' from the
-copied substring.  If DELETE is non-nil, delete the text between START
-and END from the buffer."
-  (let ((text (if delete
-                  (prog1 (buffer-substring start end)
-                    (delete-region start end))
-                (buffer-substring start end))))
+  "Return visible text between START and END, stripping hidden markup.
+If DELETE is non-nil, delete the text between START and END."
+  (let ((text "")
+        (pos start))
+    (while (< pos end)
+      (let ((next (next-overlay-change pos))
+            (exclude (seq-find (lambda (ov)
+                                 (memq (overlay-get ov 'markdown-overlays-markup-type)
+                                       '(fence language inline-code
+                                         bold italic strikethrough header)))
+                               (overlays-at pos))))
+        (unless exclude
+          (setq text (concat text (buffer-substring pos (min next end)))))
+        (setq pos (max next (1+ pos)))))
+    (when delete
+      (delete-region start end))
     (remove-text-properties 0 (length text)
                             '(line-prefix nil wrap-prefix nil)
                             text)
@@ -2731,8 +2739,8 @@ SESSION-STRATEGY overrides `agent-shell-session-strategy' buffer-locally.
 SESSION-ID resumes an existing session by its id string.
 FORK-SESSION-ID forks an existing session by its id string.
 OUTGOING-REQUEST-DECORATOR is passed through to `acp-make-client'."
-  (unless (version<= "0.90.1" shell-maker-version)
-    (error "Please update shell-maker to version 0.90.1 or newer"))
+  (unless (version<= "0.91.2" shell-maker-version)
+    (error "Please update shell-maker to version 0.91.2 or newer"))
   (unless (version<= "0.11.1" acp-package-version)
     (error "Please update acp.el to version 0.11.1 or newer"))
   (when (boundp 'agent-shell--transcript-file-path-function)

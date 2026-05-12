@@ -2337,5 +2337,21 @@ and it must handle that cleanly."
           (remove-hook 'kill-buffer-hook #'agent-shell--clean-up t))
         (kill-buffer shell-buf)))))
 
+(ert-deftest agent-shell-filter-buffer-substring-strips-hidden-markup ()
+  "Copying text should exclude markdown syntax hidden by overlays."
+  (with-temp-buffer
+    (insert "```emacs-lisp\n(defun foo (x)\n  x)\n```\n")
+    (markdown-overlays-put)
+    (let ((result (agent-shell--filter-buffer-substring (point-min) (point-max))))
+      (should (equal result "(defun foo (x)\n  x)\n\n")))))
+
+(ert-deftest agent-shell-filter-buffer-substring-strips-inline-code-backticks ()
+  "Copying inline code should exclude the surrounding backticks."
+  (with-temp-buffer
+    (insert "Use `foo-bar` for that.")
+    (markdown-overlays-put)
+    (let ((result (agent-shell--filter-buffer-substring (point-min) (point-max))))
+      (should (equal result "Use foo-bar for that.")))))
+
 (provide 'agent-shell-tests)
 ;;; agent-shell-tests.el ends here
