@@ -48,6 +48,7 @@
 (require 'map)
 (unless (require 'markdown-overlays nil 'noerror)
   (error "Please update 'shell-maker' to v0.91.2 or newer"))
+(require 'agent-shell-acp-traffic)
 (require 'agent-shell-anthropic)
 (require 'agent-shell-auggie)
 (require 'agent-shell-cline)
@@ -6971,6 +6972,7 @@ Includes STATUS, TITLE, KIND, DESCRIPTION, COMMAND, PARAMETERS, and OUTPUT."
   (unless (file-exists-p agent-shell--transcript-file)
     (error "Transcript file does not exist: %s" agent-shell--transcript-file))
   (find-file agent-shell--transcript-file))
+
 
 ;;; Queueing
 

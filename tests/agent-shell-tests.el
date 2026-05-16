@@ -2367,5 +2367,53 @@ and it must handle that cleanly."
     (let ((result (agent-shell--filter-buffer-substring (point-min) (point-max))))
       (should (equal result "Use foo-bar for that.")))))
 
+(ert-deftest agent-shell--write-acp-traffic-test ()
+  "Test `agent-shell--write-acp-traffic' writes raw traffic JSONL."
+  (let* ((temp-dir (make-temp-file "agent-shell-traffic" 'dir))
+         (agent-shell-acp-traffic-directory temp-dir)
+         (agent-shell-acp-traffic-enabled t)
+         (client (list (cons :command "claude")))
+         (message (list (cons :object '((jsonrpc . "2.0")
+                                        (method . "session/update")
+                                        (params . ((update . ((sessionUpdate . "agent_message_chunk")
+                                                              (content . ((type . "text")
+                                                                          (text . "Hello"))))))))))))
+    (unwind-protect
+        (progn
+          (agent-shell--write-acp-traffic client 'incoming 'notification message)
+          (let ((file (expand-file-name "claude.jsonl" temp-dir)))
+            (should (file-exists-p file))
+            (let ((json (json-parse-string
+                         (string-trim-right
+                          (with-temp-buffer
+                            (insert-file-contents file)
+                            (buffer-string)))
+                         :object-type 'alist)))
+              (should (stringp (map-elt json 'timestamp)))
+              (should (string= (map-elt json 'direction) "incoming"))
+              (should (string= (map-elt json 'kind) "notification"))
+              (should (string= (map-nested-elt json '(object method)) "session/update")))))
+      (delete-directory temp-dir t))))
+
+(ert-deftest agent-shell--write-acp-traffic-multiple-test ()
+  "Test that multiple calls append to the same file."
+  (let* ((temp-dir (make-temp-file "agent-shell-traffic" 'dir))
+         (agent-shell-acp-traffic-directory temp-dir)
+         (agent-shell-acp-traffic-enabled t)
+         (client (list (cons :command "claude"))))
+    (unwind-protect
+        (progn
+          (agent-shell--write-acp-traffic client 'outgoing 'request
+                                          (list (cons :object '((jsonrpc . "2.0") (method . "session/new")))))
+          (agent-shell--write-acp-traffic client 'incoming 'response
+                                          (list (cons :object '((jsonrpc . "2.0") (id . "1") (result . ((session . ((id . "abc")))))))))
+          (let ((lines (with-temp-buffer
+                         (insert-file-contents (expand-file-name "claude.jsonl" temp-dir))
+                         (split-string (string-trim-right (buffer-string)) "\n"))))
+            (should (= (length lines) 2))
+            (should (string= (map-elt (json-parse-string (nth 0 lines) :object-type 'alist) 'direction) "outgoing"))
+            (should (string= (map-elt (json-parse-string (nth 1 lines) :object-type 'alist) 'direction) "incoming"))))
+      (delete-directory temp-dir t))))
+
 (provide 'agent-shell-tests)
 ;;; agent-shell-tests.el ends here
