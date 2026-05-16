@@ -48,6 +48,7 @@
 (require 'map)
 (unless (require 'markdown-overlays nil 'noerror)
   (error "Please update 'shell-maker' to v0.91.2 or newer"))
+(require 'agent-shell-acp-traffic)
 (require 'agent-shell-anthropic)
 (require 'agent-shell-auggie)
 (require 'agent-shell-cline)
@@ -6997,7 +6998,7 @@ Default is nil (disabled). The file is appended-to atomically per event.")
 This is called automatically from `agent-shell--emit-event' when
 `agent-shell--central-transcript-file' is non-nil and writable.
 Does NOT call write-region if the file is nil or unwritable —
-caller must guard that condition.")
+caller must guard that condition."
   (when-let* ((filepath agent-shell--central-transcript-file)
               ((file-writable-p filepath)))
     (let* ((agent-name (or (map-nested-elt state '(:agent-config :mode-line-name))
