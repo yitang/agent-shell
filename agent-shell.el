@@ -3814,6 +3814,10 @@ DATA is an optional alist of event-specific data."
         (event-alist (list (cons :event event))))
     (when data
       (push (cons :data data) event-alist))
+    ;; Fan out to centralized JSONL transcript if enabled
+    (when-let* ((filepath agent-shell--central-transcript-file)
+                ((file-writable-p filepath)))
+      (agent-shell--append-centralized-transcript event data state))
     (dolist (sub (map-elt state :event-subscriptions))
       (when (and (buffer-live-p (map-elt state :buffer))
                  (or (not (map-elt sub :event))
@@ -6971,6 +6975,48 @@ Includes STATUS, TITLE, KIND, DESCRIPTION, COMMAND, PARAMETERS, and OUTPUT."
   (unless (file-exists-p agent-shell--transcript-file)
     (error "Transcript file does not exist: %s" agent-shell--transcript-file))
   (find-file agent-shell--transcript-file))
+
+;;; Centralized Transcript
+
+(defvar agent-shell--central-transcript-file nil
+  "Path to the centralized JSONL transcript file for all sessions.
+When non-nil, every event emitted via `agent-shell--emit-event' is
+also appended as a JSON line to this file. This enables aggregate
+analysis across all sessions (tool usage frequency, token costs per
+turn, error rates, etc.).
+
+Set in your Emacs config before starting any agent-shell buffer:
+
+  (setq agent-shell--central-transcript-file \"~/.agent-shell/central-transcript.jsonl\")
+
+Default is nil (disabled). The file is appended-to atomically per event.")
+
+(cl-defun agent-shell--append-centralized-transcript (&key event data state)
+  "Append EVENT+DATA to the centralized JSONL transcript.
+
+This is called automatically from `agent-shell--emit-event' when
+`agent-shell--central-transcript-file' is non-nil and writable.
+Does NOT call write-region if the file is nil or unwritable —
+caller must guard that condition.")
+  (when-let* ((filepath agent-shell--central-transcript-file)
+              ((file-writable-p filepath)))
+    (let* ((agent-name (or (map-nested-elt state '(:agent-config :mode-line-name))
+                           (map-nested-elt state '(:agent-config :buffer-name))
+                           "Unknown"))
+             (session-id (map-nested-elt state '(:session :id)))
+             (entry-alist
+              `(:timestamp ,(format-time-string "%Y-%m-%dT%H:%M:%S%z")
+                :event ,event
+                :session-id ,session-id
+                :agent-name ,agent-name
+                :data ,data)))
+      (condition-case err
+          (with-temp-buffer
+            (insert (json-serialize entry-alist))
+            (insert "\n")
+            (write-region (point-min) (point-max) filepath 'no-message))
+        (error
+         (message "Centralized transcript write error: %S" err))))))
 
 ;;; Queueing
 
