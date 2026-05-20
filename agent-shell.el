@@ -5892,23 +5892,20 @@ CHAR and OPTION are used for cursor sensor messages."
                            button)))
     button))
 
-(defun agent-shell--make-permission-actions (acp-options)
+(cl-defun agent-shell--make-permission-actions (acp-options)
   "Make actions from ACP-OPTIONS for shell rendering.
 
-See `agent-shell--make-permission-action' for ACP-OPTION and return schema."
-  (let (acp-seen-kinds)
-    (seq-sort (lambda (a b)
-                (< (length (map-elt a :label))
-                   (length (map-elt b :label))))
-              (delq nil (mapcar (lambda (acp-option)
-                                  (let ((action (agent-shell--make-permission-action
-                                                 :acp-option acp-option
-                                                 :acp-seen-kinds acp-seen-kinds)))
-                                    (push (map-elt acp-option 'kind) acp-seen-kinds)
-                                    action))
-                                acp-options)))))
+Each distinct option gets its own button, sorted by label length.
+Uses `agent-shell--make-permission-action' for conversion."
+  (seq-sort (lambda (a b)
+              (< (length (map-elt a :label))
+                 (length (map-elt b :label))))
+            (delq nil (mapcar (lambda (acp-option)
+                                (agent-shell--make-permission-action
+                                 :acp-option acp-option))
+                              acp-options))))
 
-(cl-defun agent-shell--make-permission-action (&key acp-option acp-seen-kinds)
+(cl-defun agent-shell--make-permission-action (&key acp-option)
   "Convert a single ACP-OPTION to an action alist.
 
 ACP-OPTION should be a PermissionOption per ACP spec:
@@ -5921,8 +5918,6 @@ ACP-OPTION should be a PermissionOption per ACP spec:
    (\='name . \"Allow\")
    (\='optionId . \"allow\"))
 
-ACP-SEEN-KINDS is a list of kinds already processed.  If kind is in
-ACP-SEEN-KINDS, omit the keybinding to avoid duplicates.
 
 Returns an alist of the form:
 
@@ -5932,18 +5927,19 @@ Returns an alist of the form:
    (:kind . \"allow_once\")
    (:option-id . ...))
 
-Returns nil if the ACP-OPTION kind is not recognized."
+Returns nil if the ACP-OPTION kind is not recognized. All distinct options
+are returned; no deduplication by kind is performed."
   (let* ((char-map `(("allow_always" . "!")
                      ("allow_once" . "y")
+                     ("allow_session" . "/")
                      ("reject_once" . ,(or (ignore-errors
                                              (key-description (where-is-internal 'agent-shell-interrupt
                                                                                  agent-shell-mode-map t)))
                                            "n"))))
          (kind (map-elt acp-option 'kind))
-         (char (unless (member kind acp-seen-kinds)
-                 (map-elt char-map kind)))
+         (char (map-elt char-map kind))
          (name (map-elt acp-option 'name)))
-    (when (map-elt char-map kind)
+    (when char
       (map-into `((:label . ,(if char (format "%s (%s)" name char) name))
                   (:option . ,name)
                   (:char . ,char)
